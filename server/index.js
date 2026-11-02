@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const pool = require('./db');
+const { ensureSchema } = require('./migrate');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -318,6 +319,14 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'Terjadi kesalahan internal.' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Kanban API berjalan di http://localhost:${PORT}`);
-});
+(async function boot() {
+  try {
+    await ensureSchema();
+    console.log('[boot] schema applied OK (idempotent — data never dropped)');
+  } catch (e) {
+    console.error('[boot] schema apply failed (server tetap berjalan; /api/health akan report):', e.message);
+  }
+  app.listen(PORT, () => {
+    console.log(`Kanban API berjalan di http://localhost:${PORT}`);
+  });
+})();
