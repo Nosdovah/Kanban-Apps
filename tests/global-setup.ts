@@ -15,6 +15,6 @@ export default async function globalSetup() {
     'utf8'
   );
   await pool.query(schema);
-  await pool.query('TRUNCATE tasks');
+  await pool.query('TRUNCATE tasks, sprints');
   await pool.end();
 }

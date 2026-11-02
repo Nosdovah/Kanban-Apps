@@ -53,6 +53,16 @@ Kanban-Apps/
 | PATCH  | `/api/tasks/:id`    | Update parsial (mis. status saja)  |
 | DELETE | `/api/tasks/:id`    | Hapus tugas                        |
 
+### Sprint
+
+| Method | Endpoint             | Deskripsi                            |
+|--------|----------------------|--------------------------------------|
+| GET    | `/api/sprints`       | List sprint + statistik (poin/tugas) |
+| POST   | `/api/sprints`       | Buat sprint                          |
+| GET    | `/api/sprints/:id`   | Detail sprint + daftar tugasnya      |
+| PATCH  | `/api/sprints/:id`   | Update sprint (nama, goal, status)   |
+| DELETE | `/api/sprints/:id`   | Hapus sprint (tugas tetap, `sprintId` jadi null) |
+
 ### Bentuk data tugas
 
 ```json

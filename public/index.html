@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agile Kanban — Progress Tracker (API + PostgreSQL)</title>
+<title>AgileKanban</title>
 <style>
   :root{
     --bg:#0f1420; --panel:#171e2e; --panel2:#1d2637; --border:#2a3448;
@@ -64,6 +64,7 @@
   .badge.p-high{color:var(--red);} .badge.p-urgent{color:#fff; background:var(--red); border-color:var(--red);}
   .badge.overdue{color:#fff; background:var(--red); border-color:var(--red);}
   .badge.assignee{color:var(--blue);}
+  .badge.sprint{color:var(--purple);}
   .empty{color:var(--muted); font-size:12px; text-align:center; padding:18px 6px; font-style:italic;}
   .timeline-wrap{background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:auto;}
   .tl-inner{min-width:900px;}
@@ -88,6 +89,27 @@
   .bar.st-backlog{background:#94a3b8;}
   .bar.overdue{outline:2px solid var(--red); outline-offset:1px;}
   .today-line{position:absolute; top:0; bottom:0; width:2px; background:var(--accent2); z-index:1;}
+  /* sprints */
+  .sprint-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px;}
+  .sprint-head h2{font-size:18px;}
+  .sprint-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px;}
+  .sprint-card{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px;
+        cursor:pointer; transition:.15s;}
+  .sprint-card:hover{border-color:var(--accent2);}
+  .sprint-card .sc-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;}
+  .sprint-card .sc-head strong{font-size:14px;}
+  .sprint-card .sc-dates{font-size:11.5px; color:var(--muted); margin-bottom:6px;}
+  .sprint-card .sc-goal{font-size:12px; color:var(--muted); line-height:1.4; margin-bottom:10px;
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .sprint-card .sc-meta{font-size:11.5px; color:var(--muted); margin-top:8px;}
+  .badge.s-st-planned{color:var(--blue);} .badge.s-st-active{color:var(--yellow);} .badge.s-st-done{color:var(--green);}
+  .progress{background:var(--bg); border:1px solid var(--border); border-radius:20px; height:8px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--accent2); border-radius:20px; transition:width .3s;}
+  .sd-tasks{margin-top:12px; display:flex; flex-direction:column; gap:6px;}
+  .sd-task{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+        display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px;}
+  .burndown{width:100%; margin:10px 0;}
+  .burndown svg{width:100%; height:auto; background:var(--bg); border:1px solid var(--border); border-radius:8px;}
   .hint{color:var(--muted); font-size:12px; margin-top:6px; margin-bottom:10px;}
   .offline{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:30px;
            text-align:center; margin-top:10px;}
@@ -113,7 +135,7 @@
 </head>
 <body>
 <header>
-  <div class="logo">Agile<span>Kanban</span> · API + PostgreSQL</div>
+  <div class="logo">Agile<span>Kanban</span></div>
   <div class="toolbar">
     <span id="conn" class="conn loading">Menghubungkan…</span>
     <input id="search" placeholder="Cari tugas…" style="width:150px;">
@@ -125,6 +147,7 @@
     </select>
     <button id="viewBoard" class="active">Board</button>
     <button id="viewTimeline">Timeline</button>
+    <button id="viewSprint">Sprint</button>
     <button id="btnSample" class="ghost">Contoh data</button>
     <button id="btnExport" class="ghost">Export</button>
     <button id="btnImport" class="ghost">Import</button>
@@ -136,6 +159,7 @@
   <div class="stats" id="stats"></div>
   <div class="board" id="board" style="display:none;"></div>
   <div class="timeline-wrap" id="timeline" style="display:none;"></div>
+  <div class="sprints" id="sprints" style="display:none;"></div>
   <div class="offline" id="offline" style="display:none;">
     <p><strong>API tidak terjangkau.</strong></p>
     <p id="offlineMsg" style="font-family:monospace; font-size:12px;"></p>
@@ -190,10 +214,61 @@
         <input id="mDue" type="date">
       </div>
     </div>
+    <div class="field">
+      <label>Sprint (opsional)</label>
+      <select id="mSprint"><option value="">Tanpa sprint</option></select>
+    </div>
     <div class="modal-actions">
       <button id="delBtn" class="ghost" style="color:var(--red); border-color:var(--red); display:none;">Hapus</button>
       <button id="btnCancel" class="ghost">Batal</button>
       <button id="btnSave" class="primary">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sprintOverlay">
+  <div class="modal">
+    <h3 id="sprintModalTitle">Sprint Baru</h3>
+    <div class="field">
+      <label>Nama sprint *</label>
+      <input id="sName" placeholder="mis. Sprint 1">
+    </div>
+    <div class="field">
+      <label>Goal</label>
+      <textarea id="sGoal" placeholder="Target sprint…"></textarea>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Mulai</label><input id="sStart" type="date"></div>
+      <div class="field"><label>Selesai</label><input id="sEnd" type="date"></div>
+    </div>
+    <div class="field">
+      <label>Status</label>
+      <select id="sStatus">
+        <option value="planned">Planned</option>
+        <option value="active">Active</option>
+        <option value="done">Done</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button id="sCancel" class="ghost">Batal</button>
+      <button id="sSave" class="primary">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sprintDetailOverlay">
+  <div class="modal" style="width:620px;">
+    <h3 id="sdName">Sprint</h3>
+    <div class="badges" id="sdBadges" style="margin-bottom:8px;"></div>
+    <div id="sdInfo" style="color:var(--muted); font-size:12.5px; margin-bottom:6px;"></div>
+    <div id="sdGoal" style="color:var(--muted); font-size:13px; margin-bottom:10px;"></div>
+    <div class="burndown" id="sdBurndown"></div>
+    <div class="sd-tasks" id="sdTasks"></div>
+    <div class="modal-actions">
+      <button id="sdDelete" class="ghost" style="color:var(--red); border-color:var(--red);">Hapus</button>
+      <button id="sdStart" class="ghost">Mulai Sprint</button>
+      <button id="sdComplete" class="primary">Selesaikan Sprint</button>
+      <button id="sdClose" class="ghost">Tutup</button>
     </div>
   </div>
 </div>
@@ -211,10 +286,13 @@
     {id:'done',     label:'Done',         color:'#34d399'},
   ];
   const PRIORITY_LABEL = {low:'Low', medium:'Medium', high:'High', urgent:'Urgent'};
+  const SPRINT_LABEL = {planned:'Planned', active:'Active', done:'Done'};
 
   let tasks = [];
+  let sprints = [];
   let view = 'board';
   let editingId = null;
+  let editingSprintId = null;
   let draggedId = null;
   let wasDragged = false;
 
@@ -252,21 +330,23 @@
     $('offline').style.display = state === 'bad' ? 'block' : 'none';
     $('board').style.display = state === 'bad' ? 'none' : (view === 'board' ? 'flex' : 'none');
     $('timeline').style.display = state === 'bad' ? 'none' : (view === 'timeline' ? 'block' : 'none');
+    $('sprints').style.display = state === 'bad' ? 'none' : (view === 'sprint' ? 'block' : 'none');
   }
 
   async function loadTasks(){
     setConn('loading');
     try {
       tasks = await api('/api/tasks');
+      sprints = await api('/api/sprints');
       setConn('ok');
       render();
     } catch(e){
-      tasks = [];
+      tasks = []; sprints = [];
       setConn('bad', e.message);
     }
   }
 
-  function render(){ renderStats(); renderBoard(); renderTimeline(); populateFilters(); }
+  function render(){ renderStats(); renderBoard(); renderTimeline(); renderSprints(); populateFilters(); populateSprintOptions(); }
 
   function renderStats(){
     const total = tasks.length;
@@ -288,6 +368,13 @@
     sel.innerHTML = '<option value="">Semua orang</option>' +
       assignees.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
     if(assignees.includes(cur)) sel.value = cur;
+  }
+
+  function populateSprintOptions(){
+    const sel = $('mSprint'); const cur = sel.value;
+    sel.innerHTML = '<option value="">Tanpa sprint</option>' +
+      sprints.map(s => `<option value="${s.id}">${esc(s.name)}${s.status==='done'?' (selesai)':''}</option>`).join('');
+    if(cur) sel.value = cur;
   }
 
   function filteredTasks(){
@@ -322,6 +409,10 @@
     let b = `<span class="badge p-${p}">${PRIORITY_LABEL[p]||p}</span>`;
     if(t.points) b += `<span class="badge">${t.points} pt</span>`;
     if(t.assignee) b += `<span class="badge assignee">${esc(t.assignee)}</span>`;
+    if(t.sprintId){
+      const sp = sprints.find(x => x.id === t.sprintId);
+      if(sp) b += `<span class="badge sprint">Sprint: ${esc(sp.name)}</span>`;
+    }
     if(t.due){
       b += overdue ? `<span class="badge overdue">⚠ ${t.due}</span>` : `<span class="badge">📅 ${t.due}</span>`;
     }
@@ -386,16 +477,96 @@
     </div>`;
   }
 
+  function renderSprints(){
+    const el = $('sprints');
+    const cards = sprints.map(s => {
+      const total = s.totalPoints || 0;
+      const done = s.donePoints || 0;
+      const pct = total ? Math.round(done/total*100) : 0;
+      const stLabel = SPRINT_LABEL[s.status] || s.status;
+      return `<div class="sprint-card" data-id="${s.id}">
+        <div class="sc-head"><strong>${esc(s.name)}</strong><span class="badge s-st-${s.status}">${stLabel}</span></div>
+        <div class="sc-dates">📅 ${s.start||'—'} → ${s.due||'—'}</div>
+        ${s.goal ? `<div class="sc-goal">🎯 ${esc(s.goal)}</div>` : ''}
+        <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="sc-meta">${done}/${total} poin · ${s.taskCount||0} tugas</div>
+      </div>`;
+    }).join('');
+    el.innerHTML = `<div class="sprint-head"><h2>Sprint</h2><button id="btnAddSprint" class="primary">＋ Sprint Baru</button></div>` +
+      `<div class="sprint-grid">${cards || '<div class="empty">Belum ada sprint. Klik "＋ Sprint Baru".</div>'}</div>`;
+  }
+
+  function burndownSVG(sprint, sprintTasks){
+    if(!sprint.start || !sprint.due) return '<div class="hint">Atur tanggal mulai & selesai sprint untuk melihat burndown.</div>';
+    const start = parseDate(sprint.start), end = parseDate(sprint.due);
+    const days = [];
+    for(let d = new Date(start); d <= end; d = addDays(d,1)) days.push(new Date(d));
+    if(days.length < 2) return '<div class="hint">Rentang sprint terlalu pendek untuk burndown.</div>';
+
+    const total = sprintTasks.reduce((s,t) => s + (parseFloat(t.points)||0), 0);
+    const completedByDay = {};
+    sprintTasks.forEach(t => {
+      if(t.status === 'done' && t.completedAt){
+        const d = toISO(new Date(t.completedAt));
+        completedByDay[d] = (completedByDay[d]||0) + (parseFloat(t.points)||0);
+      }
+    });
+
+    const W = 560, H = 230, padL = 46, padR = 14, padT = 16, padB = 30;
+    const n = days.length;
+    const x = i => padL + (W-padL-padR) * (i/(n-1));
+    const y = v => padT + (H-padT-padB) * (1 - (total ? v/total : 0));
+
+    const idealPts = days.map((_,i) => {
+      const remaining = total * (1 - i/(n-1));
+      return `${x(i).toFixed(1)},${y(remaining).toFixed(1)}`;
+    }).join(' ');
+
+    let cum = total;
+    const actualPts = days.map((_,i) => {
+      if(i > 0) cum -= (completedByDay[toISO(days[i])]||0);
+      return `${x(i).toFixed(1)},${y(Math.max(0,cum)).toFixed(1)}`;
+    }).join(' ');
+
+    let grid = '';
+    for(let g=0; g<=4; g++){
+      const v = total*g/4;
+      grid += `<line x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W-padR}" y2="${y(v).toFixed(1)}" stroke="#2a3448" stroke-width="1"/>` +
+        `<text x="${padL-6}" y="${(y(v)+4).toFixed(1)}" fill="#8b98b3" font-size="10" text-anchor="end">${Math.round(v)}</text>`;
+    }
+
+    const xLabels = days.map((d,i) => {
+      if(i === 0 || i === n-1 || i % Math.ceil(n/8) === 0)
+        return `<text x="${x(i).toFixed(1)}" y="${H-padB+14}" fill="#8b98b3" font-size="9" text-anchor="middle">${d.getDate()}/${d.getMonth()+1}</text>`;
+      return '';
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+      ${grid}
+      <line x1="${padL}" y1="${y(0).toFixed(1)}" x2="${W-padR}" y2="${y(0).toFixed(1)}" stroke="#2a3448"/>
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#2a3448"/>
+      ${xLabels}
+      <polyline points="${idealPts}" fill="none" stroke="#8b98b3" stroke-width="2" stroke-dasharray="5,4"/>
+      <polyline points="${actualPts}" fill="none" stroke="#818cf8" stroke-width="2.5"/>
+      <text x="${W-padR}" y="${padT+10}" fill="#8b98b3" font-size="9" text-anchor="end">— ideal</text>
+      <text x="${W-padR}" y="${padT+22}" fill="#818cf8" font-size="9" text-anchor="end">— aktual</text>
+    </svg>`;
+  }
+
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function setView(v){
     view = v;
     $('board').style.display = v==='board' ? 'flex' : 'none';
     $('timeline').style.display = v==='timeline' ? 'block' : 'none';
+    $('sprints').style.display = v==='sprint' ? 'block' : 'none';
     $('viewBoard').classList.toggle('active', v==='board');
     $('viewTimeline').classList.toggle('active', v==='timeline');
+    $('viewSprint').classList.toggle('active', v==='sprint');
+    if(v==='sprint') renderSprints();
   }
 
+  /* ---------- task modal ---------- */
   function openModal(task){
     editingId = task ? task.id : null;
     $('modalTitle').textContent = task ? 'Edit Tugas' : 'Tambah Tugas';
@@ -407,11 +578,63 @@
     $('mPoints').value = task ? (task.points||'') : '';
     $('mStart').value = task ? (task.start||'') : '';
     $('mDue').value = task ? (task.due||'') : '';
+    $('mSprint').value = task ? (task.sprintId||'') : '';
     $('delBtn').style.display = task ? 'block' : 'none';
     $('overlay').classList.add('open');
     setTimeout(() => $('mTitle').focus(), 30);
   }
   function closeModal(){ $('overlay').classList.remove('open'); editingId = null; }
+
+  /* ---------- sprint modal ---------- */
+  function openSprintModal(sprint){
+    editingSprintId = sprint ? sprint.id : null;
+    $('sprintModalTitle').textContent = sprint ? 'Edit Sprint' : 'Sprint Baru';
+    $('sName').value = sprint ? sprint.name : '';
+    $('sGoal').value = sprint ? (sprint.goal||'') : '';
+    $('sStatus').value = sprint ? sprint.status : 'planned';
+    $('sStart').value = sprint ? (sprint.start||'') : '';
+    $('sEnd').value = sprint ? (sprint.due||'') : '';
+    $('sprintOverlay').classList.add('open');
+    setTimeout(() => $('sName').focus(), 30);
+  }
+  function closeSprintModal(){ $('sprintOverlay').classList.remove('open'); editingSprintId = null; }
+
+  async function openSprintDetail(id){
+    try {
+      const s = await api('/api/sprints/' + id);
+      const stLabel = SPRINT_LABEL[s.status] || s.status;
+      $('sdName').textContent = s.name;
+      $('sdBadges').innerHTML = `<span class="badge s-st-${s.status}">${stLabel}</span>` +
+        (s.totalPoints != null ? `<span class="badge">${s.donePoints||0}/${s.totalPoints||0} poin</span>` : '');
+      $('sdInfo').textContent = `📅 ${s.start||'—'} → ${s.due||'—'}`;
+      $('sdGoal').textContent = s.goal ? `🎯 ${s.goal}` : '';
+      $('sdTasks').innerHTML = s.tasks.length
+        ? s.tasks.map(t => {
+            const st = COLUMNS.find(c => c.id === t.status);
+            return `<div class="sd-task">
+              <span>${esc(t.title)}${t.points?' · '+t.points+' pt':''}</span>
+              <span class="badge" style="color:${st.color}; border-color:${st.color}">${st.label}</span>
+            </div>`;
+          }).join('')
+        : '<div class="empty">Belum ada tugas di sprint ini.</div>';
+      $('sdBurndown').innerHTML = burndownSVG(s, s.tasks);
+      $('sdStart').style.display = s.status === 'planned' ? '' : 'none';
+      $('sdComplete').style.display = s.status === 'active' ? '' : 'none';
+      $('sprintDetailOverlay').dataset.id = id;
+      $('sprintDetailOverlay').classList.add('open');
+    } catch(e){ toast('Gagal buka sprint: ' + e.message); }
+  }
+
+  async function patchSprintStatus(status){
+    const id = $('sprintDetailOverlay').dataset.id;
+    if(!id) return;
+    try {
+      const s = await api('/api/sprints/' + id, { method: 'PATCH', body: { status } });
+      const i = sprints.findIndex(x => x.id === id);
+      if(i >= 0) sprints[i] = s;
+      render(); openSprintDetail(id); toast('Sprint diperbarui ✓');
+    } catch(e){ toast(e.message); }
+  }
 
   function sampleData(){
     const today = new Date();
@@ -431,10 +654,46 @@
   $('overlay').onclick = e => { if(e.target === $('overlay')) closeModal(); };
   $('viewBoard').onclick = () => setView('board');
   $('viewTimeline').onclick = () => setView('timeline');
+  $('viewSprint').onclick = () => setView('sprint');
   $('search').oninput = render;
   $('fAssignee').onchange = render;
   $('fPriority').onchange = render;
   $('btnRetry').onclick = loadTasks;
+
+  $('sCancel').onclick = closeSprintModal;
+  $('sprintOverlay').onclick = e => { if(e.target === $('sprintOverlay')) closeSprintModal(); };
+
+  $('sSave').onclick = async () => {
+    const name = $('sName').value.trim();
+    if(!name){ toast('Nama sprint wajib diisi'); $('sName').focus(); return; }
+    const data = { name, goal: $('sGoal').value.trim(), status: $('sStatus').value, start: $('sStart').value, due: $('sEnd').value };
+    try {
+      if(editingSprintId){
+        const s = await api('/api/sprints/' + editingSprintId, { method: 'PATCH', body: data });
+        const i = sprints.findIndex(x => x.id === editingSprintId);
+        if(i >= 0) sprints[i] = s;
+      } else {
+        const s = await api('/api/sprints', { method: 'POST', body: data });
+        sprints.unshift(s);
+      }
+      closeSprintModal(); render(); toast('Sprint tersimpan ✓');
+    } catch(e){ toast('Error: ' + e.message); }
+  };
+
+  $('sdClose').onclick = () => $('sprintDetailOverlay').classList.remove('open');
+  $('sdStart').onclick = () => patchSprintStatus('active');
+  $('sdComplete').onclick = () => patchSprintStatus('done');
+  $('sdDelete').onclick = async () => {
+    const id = $('sprintDetailOverlay').dataset.id;
+    if(!id) return;
+    if(!confirm('Hapus sprint ini? Tugas di dalamnya tidak terhapus (hanya lepas dari sprint).')) return;
+    try {
+      await api('/api/sprints/' + id, { method: 'DELETE' });
+      sprints = sprints.filter(s => s.id !== id);
+      $('sprintDetailOverlay').classList.remove('open');
+      render(); toast('Sprint dihapus ✓');
+    } catch(e){ toast('Gagal hapus: ' + e.message); }
+  };
 
   $('btnSave').onclick = async () => {
     const title = $('mTitle').value.trim();
@@ -448,6 +707,7 @@
       points: $('mPoints').value,
       start: $('mStart').value,
       due: $('mDue').value,
+      sprintId: $('mSprint').value || null,
     };
     try {
       if(editingId){
@@ -556,11 +816,18 @@
   document.addEventListener('click', e => {
     if(wasDragged){ wasDragged = false; return; }
     const card = e.target.closest('.card');
-    if(card){ const t = tasks.find(x => x.id === card.dataset.id); if(t) openModal(t); }
+    if(card){ const t = tasks.find(x => x.id === card.dataset.id); if(t) openModal(t); return; }
+    if(e.target.closest('#btnAddSprint')){ openSprintModal(null); return; }
+    const sc = e.target.closest('.sprint-card');
+    if(sc){ openSprintDetail(sc.dataset.id); }
   });
 
   document.addEventListener('keydown', e => {
-    if(e.key === 'Escape' && $('overlay').classList.contains('open')) closeModal();
+    if(e.key === 'Escape'){
+      if($('overlay').classList.contains('open')) closeModal();
+      if($('sprintOverlay').classList.contains('open')) closeSprintModal();
+      if($('sprintDetailOverlay').classList.contains('open')) $('sprintDetailOverlay').classList.remove('open');
+    }
   });
 
   setView('board');
