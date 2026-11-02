@@ -44,6 +44,8 @@ function parseTask(body) {
     if (Number.isFinite(n)) points = n;
   }
 
+  const nullIfEmpty = (v) => (v === '' || v === undefined || v === null ? null : v);
+
   return {
     title,
     description: (body.description ?? body.desc ?? '').toString().trim(),
@@ -51,8 +53,8 @@ function parseTask(body) {
     priority: PRIORITIES.has(body.priority) ? body.priority : 'medium',
     status: STATUSES.has(body.status) ? body.status : 'todo',
     points,
-    start: body.start ?? body.start_date ?? null,
-    due: body.due ?? body.due_date ?? null,
+    start: nullIfEmpty(body.start ?? body.start_date ?? null),
+    due: nullIfEmpty(body.due ?? body.due_date ?? null),
   };
 }
 
